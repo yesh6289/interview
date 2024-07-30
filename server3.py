@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import boto3
 import cv2
-import pyaudio
+
 import wave
 import random
 import os
@@ -106,44 +106,44 @@ def save_audio():
     return jsonify({'status': 'success'}), 200
 
 def check_mic():
-    # Parameters for audio recording
-    CHUNK = 1024
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 1
-    RATE = 44100
-    RECORD_SECONDS = 3
+    # # Parameters for audio recording
+    # CHUNK = 1024
+    # FORMAT = pyaudio.paInt16
+    # CHANNELS = 1
+    # RATE = 44100
+    # RECORD_SECONDS = 3
 
-    # Initialize pyaudio
-    p = pyaudio.PyAudio()
+    # # Initialize pyaudio
+    # p = pyaudio.PyAudio()
 
-    # Open the audio stream
-    stream = p.open(format=FORMAT,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    input=True,
-                    frames_per_buffer=CHUNK)
+    # # Open the audio stream
+    # stream = p.open(format=FORMAT,
+    #                 channels=CHANNELS,
+    #                 rate=RATE,
+    #                 input=True,
+    #                 frames_per_buffer=CHUNK)
 
-    frames = []
+    # frames = []
 
-    # Record audio
-    for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-        data = stream.read(CHUNK)
-        frames.append(data)
+    # # Record audio
+    # for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+    #     data = stream.read(CHUNK)
+    #     frames.append(data)
 
-    # Stop and close the stream
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+    # # Stop and close the stream
+    # stream.stop_stream()
+    # stream.close()
+    # p.terminate()
 
-    # Convert recorded frames to numpy array
-    audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
+    # # Convert recorded frames to numpy array
+    # audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
 
-    # Check if there is any sound in the recorded audio
-    if np.abs(audio_data).mean() > 0:
-        return True
-    else:
-        return False
-
+    # # Check if there is any sound in the recorded audio
+    # if np.abs(audio_data).mean() > 0:
+    #     return True
+    # else:
+    #     return False
+    return True
 def check_camera():
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
