@@ -1,13 +1,14 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import boto3
-import cv2
-#import pyaudio
-import wave
 import random
 import os
 from datetime import datetime
-import numpy as np
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +16,16 @@ CORS(app)
 # AWS S3 setup
 s3 = boto3.client('s3')
 BUCKET_NAME = 'virtualinterviewstorage'
+
+@app.route('/test-s3', methods=['GET'])
+def test_s3():
+    try:
+        # Test listing objects in the S3 bucket
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+        return jsonify(response)
+    except Exception as e:
+        app.logger.error(f"S3 Test Error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to interact with S3'}), 500
 
 # Directory to store videos and audios locally
 LOCAL_STORAGE_DIR = 'local_storage'
@@ -48,19 +59,6 @@ questions = [
 def start_interview():
     return render_template('index.html')
 
-# Route to check mic and camera
-@app.route('/check-devices', methods=['POST', 'GET'])
-def check_devices():
-    mic_working = check_mic()
-    camera_working = check_camera()
-    if not mic_working or not camera_working:
-        return jsonify({
-            'status': 'error',
-            'mic': mic_working,
-            'camera': camera_working
-        }), 400
-    return jsonify({'status': 'success'}), 200
-
 # Route to conduct interview
 @app.route('/conduct-interview', methods=['POST'])
 def conduct_interview():
@@ -71,86 +69,40 @@ def conduct_interview():
 @app.route('/save-video', methods=['POST'])
 def save_video():
     video_data = request.files['video']
+    question_index = request.form['question_index']
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    video_filename = f"interview_{timestamp}.mp4"
+    video_filename = f"interview_{timestamp}_question_{question_index}.mp4"
     local_video_path = os.path.join(LOCAL_STORAGE_DIR, video_filename)
-    
+
     # Save video locally
     video_data.save(local_video_path)
-    
+
     # Upload video to S3
     s3.upload_file(local_video_path, BUCKET_NAME, video_filename)
-    
+
     # Remove local video file after upload
     os.remove(local_video_path)
-    
+
     return jsonify({'status': 'success'}), 200
 
-# Route to save audio
-@app.route('/save-audio', methods=['POST'])
-def save_audio():
-    audio_data = request.files['audio']
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    audio_filename = f"interview_{timestamp}.wav"
-    local_audio_path = os.path.join(LOCAL_STORAGE_DIR, audio_filename)
-    
-    # Save audio locally
-    audio_data.save(local_audio_path)
-    
-    # Upload audio to S3
-    s3.upload_file(local_audio_path, BUCKET_NAME, audio_filename)
-    
-    # Remove local audio file after upload
-    os.remove(local_audio_path)
-    
-    return jsonify({'status': 'success'}), 200
+@app.route('/list-videos', methods=['GET'])
+def list_videos():
+    try:
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+        if 'Contents' not in response:
+            return jsonify({'error': 'No videos found in the bucket.'}), 404
 
-def check_mic():
-    # # Parameters for audio recording
-    # CHUNK = 1024
-    # FORMAT = pyaudio.paInt16
-    # CHANNELS = 1
-    # RATE = 44100
-    # RECORD_SECONDS = 3
+        videos = []
+        for obj in response['Contents']:
+            video_url = s3.generate_presigned_url('get_object',
+                                                  Params={'Bucket': BUCKET_NAME, 'Key': obj['Key']},
+                                                  ExpiresIn=3600)
+            videos.append({'filename': obj['Key'], 'url': video_url})
 
-    # # Initialize pyaudio
-    # p = pyaudio.PyAudio()
+        return jsonify(videos)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-    # # Open the audio stream
-    # stream = p.open(format=FORMAT,
-    #                 channels=CHANNELS,
-    #                 rate=RATE,
-    #                 input=True,
-    #                 frames_per_buffer=CHUNK)
-
-    # frames = []
-
-    # # Record audio
-    # for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-    #     data = stream.read(CHUNK)
-    #     frames.append(data)
-
-    # # Stop and close the stream
-    # stream.stop_stream()
-    # stream.close()
-    # p.terminate()
-
-    # # Convert recorded frames to numpy array
-    # audio_data = np.frombuffer(b''.join(frames), dtype=np.int16)
-
-    # # Check if there is any sound in the recorded audio
-    # if np.abs(audio_data).mean() > 0:
-    #     return True
-    # else:
-    #     return False
-    return True
-def check_camera():
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        return False
-    ret, frame = cap.read()
-    cap.release()
-    return ret
 
 if __name__ == '__main__':
     app.run(debug=True)
